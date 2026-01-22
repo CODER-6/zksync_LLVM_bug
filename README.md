@@ -1,3 +1,16 @@
+# zkSync LLVM 编译器 Bug 复现项目
+
+本项目用于复现 zkSync LLVM 编译器 bug（CVE-2024-45056）。
+
+## 项目说明
+
+- **分析文档**: 详细的 bug 分析请参阅 [zkSync-LLVM-Bug-分析.md](zkSync-LLVM-Bug-分析.md)
+- **复现命令**: 复现所需的完整命令请参阅 [com.md](com.md)
+
+这是一个影响 Aave V3 zkSync 部署的严重编译器漏洞，涉及位操作在编译过程中的错误优化。
+
+---
+
 ## Foundry
 
 **Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**

@@ -1,21 +1,34 @@
+# zkSync LLVM Bug 复现命令
 
+## 环境要求
 
-本试验在macOS（m1）环境下执行
-需要提前下载的内容：
+本试验在 macOS（Apple Silicon M1）环境下执行。
 
-1. 两个版本的zksolc
-2. foundry-zksync-src
-3. solc （solc-macosx-arm64-0.8.24-1.0.2）
+### 需要提前下载的内容
 
+1. **zksolc 编译器** - 两个版本：
+   - zksolc v1.5.2（存在 bug 的版本）
+   - zksolc v1.5.3（修复 bug 的版本）
+2. **foundry-zksync-src** - zkSync 版本的 Foundry 工具链
+3. **solc** - Solidity 编译器（solc-macosx-arm64-0.8.24-1.0.2）
 
+---
 
-0. 环境变量
+## 步骤 0：设置环境变量
 
-```
+定义编译器路径，方便后续使用：
+
+```bash
 ZKSOLC_OLD="/Users/dk/Desktop/code/zksync/zksolc-macosx-arm64-v1.5.2"
 SOLC_ZK="/Users/dk/Desktop/code/zksync/solc-macosx-arm64-0.8.24-1.0.2"
 ZKSOLC_NEW="/Users/dk/Desktop/code/zksync/zksolc-macosx-arm64-v1.5.3"
+```
 
+### macOS 权限设置
+
+在 macOS 上，下载的二进制文件需要设置执行权限并移除隔离属性：
+
+```bash
 chmod +x /Users/dk/Desktop/code/zksync/zksolc-macosx-arm64-v1.5.2  
 xattr -l /Users/dk/Desktop/code/zksync/zksolc-macosx-arm64-v1.5.2
 xattr -d com.apple.quarantine /Users/dk/Desktop/code/zksync/zksolc-macosx-arm64-v1.5.2
@@ -25,19 +38,13 @@ xattr -l /Users/dk/Desktop/code/zksync/zksolc-macosx-arm64-v1.5.3
 xattr -d com.apple.quarantine /Users/dk/Desktop/code/zksync/zksolc-macosx-arm64-v1.5.3
 ```
 
-权限设置：
+---
 
-```
-chmod +x /Users/dk/Desktop/code/zksync/zksolc-macosx-arm64-v1.5.3  
-xattr -l /Users/dk/Desktop/code/zksync/zksolc-macosx-arm64-v1.5.3
-xattr -d com.apple.quarantine /Users/dk/Desktop/code/zksync/zksolc-macosx-arm64-v1.5.3
-```
+## 步骤 1：编译合约
 
+### 准备 standard.json 输入文件
 
-
-1. 使用“错误版本编译器”（zksolc 1.5.2）编译代码
-
-   准备 standard.json，使用standard.json作为输入进行编译
+使用 Solidity Standard JSON 格式作为编译输入，包含待测试的 MiscompileBitmap 合约源码：
 
 ```json
 {
@@ -58,33 +65,52 @@ xattr -d com.apple.quarantine /Users/dk/Desktop/code/zksync/zksolc-macosx-arm64-
 }
 ```
 
-编译合约：
+### 使用两个版本的编译器分别编译
 
-```
+使用有 bug 的旧版本（v1.5.2）和修复后的新版本（v1.5.3）分别编译合约：
+
+```bash
 "$ZKSOLC_OLD" --solc "$SOLC_ZK" --standard-json < standard.json > out_old.json
 "$ZKSOLC_NEW" --solc "$SOLC_ZK" --standard-json < standard.json > out_new.json
 ```
 
+- `out_old.json`：使用 v1.5.2 编译的结果（包含 bug）
+- `out_new.json`：使用 v1.5.3 编译的结果（已修复）
 
+---
 
-启动本地节点：
+## 步骤 2：启动 zkSync 本地测试节点
 
-```
+使用 anvil-zksync 启动本地 zkSync 测试网络（在新终端窗口运行）：
+
+```bash
 anvil-zksync -vv
 ```
 
+> **说明**：`-vv` 参数启用详细日志输出，方便调试。节点默认运行在 `http://localhost:8011`。
 
+---
 
-继续设置一些环境变量：
+## 步骤 3：设置网络连接参数
 
-```
+定义 RPC 端点和测试账户私钥：
+
+```bash
 RPC="http://localhost:8011"
 PK="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 ```
 
-部署合约：
+> **说明**：这是 anvil-zksync 的默认测试账户私钥，预装了测试 ETH。
 
-```
+---
+
+## 步骤 4：部署合约
+
+### 部署使用旧版编译器编译的合约（有 bug）
+
+从 `out_old.json` 提取字节码并部署：
+
+```bash
 cast send --rpc-url http://localhost:8011 \
   --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
   --zksync \
@@ -93,8 +119,15 @@ cast send --rpc-url http://localhost:8011 \
 blockHash            0x479c48525f08e451349aced669ff7ae6bd932cb14099a927b05e7948c865c904
 blockNumber          1
 contractAddress      0x588758d8a0Ad1162A6294f3C274753137E664aE0
-  
-  
+```
+
+> **重要**：记录部署的合约地址 `0x588758d8a0Ad1162A6294f3C274753137E664aE0`。
+
+### 部署使用新版编译器编译的合约（已修复）
+
+从 `out_new.json` 提取字节码并部署：
+
+```bash
 cast send --rpc-url http://localhost:8011 \
   --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
   --zksync \
@@ -106,58 +139,129 @@ blockNumber          3
 contractAddress      0x6B828bcb33305478cd7d27eB323F5C5B7b4aFdbe
 ```
 
-继续设置一些环境变量：
+> **重要**：记录部署的合约地址 `0x6B828bcb33305478cd7d27eB323F5C5B7b4aFdbe`。
 
-```
+### 保存合约地址为环境变量
+
+方便后续调用合约函数：
+
+```bash
 ADDR_OLD="0x588758d8a0Ad1162A6294f3C274753137E664aE0"
 ADDR_NEW="0x6B828bcb33305478cd7d27eB323F5C5B7b4aFdbe"
 ```
 
+---
 
+## 步骤 5：测试合约行为
 
+### 测试旧版本合约（有 bug）
 
+#### 5.1 调用 setAllPairsUpTo 函数
 
-逐步进行函数调用：
+设置位图，对索引 0 到 120 的所有位对进行设置：
 
-```
-调用问题合约：
-
+```bash
 cast send --rpc-url "$RPC" --private-key "$PK" --zksync \
   "$ADDR_OLD" "setAllPairsUpTo(uint256)" 120
+```
 
+#### 5.2 读取 data 值
+
+查看设置后的位图数据：
+
+```bash
 cast call --rpc-url "$RPC" "$ADDR_OLD" "data()(uint256)"
+```
 
+**预期结果**：`7067388259113537318333190002971674063309935587502475832486424805170479103`
 
+#### 5.3 调用 clearBorrow 函数
+
+清除索引 80 位置的借款标志位：
+
+```bash
 cast send --rpc-url "$RPC" --private-key "$PK" --zksync \
   "$ADDR_OLD" "clearBorrow(uint256)" 80
-  
-cast call --rpc-url "$RPC" "$ADDR_OLD" "data()(uint256)"
- 
- 
-调用新合约：
+```
 
+#### 5.4 再次读取 data 值
+
+查看清除操作后的位图数据：
+
+```bash
+cast call --rpc-url "$RPC" "$ADDR_OLD" "data()(uint256)"
+```
+
+**实际结果（bug）**：`26959946667150639791744011812357824837229774757108006441791745163264`  
+**说明**：由于编译器 bug，清除操作错误地清除了多个位，而不是只清除单个位。
+
+---
+
+### 测试新版本合约（已修复）
+
+#### 5.5 调用 setAllPairsUpTo 函数
+
+设置位图，对索引 0 到 120 的所有位对进行设置：
+
+```bash
 cast send --rpc-url "$RPC" --private-key "$PK" --zksync \
   "$ADDR_NEW" "setAllPairsUpTo(uint256)" 120
+```
 
+#### 5.6 读取 data 值
+
+查看设置后的位图数据：
+
+```bash
 cast call --rpc-url "$RPC" "$ADDR_NEW" "data()(uint256)"
+```
 
+**预期结果**：`7067388259113537318333190002971674063309935587502475832486424805170479103`
 
+#### 5.7 调用 clearBorrow 函数
+
+清除索引 80 位置的借款标志位：
+
+```bash
 cast send --rpc-url "$RPC" --private-key "$PK" --zksync \
   "$ADDR_NEW" "clearBorrow(uint256)" 80
-  
+```
+
+#### 5.8 再次读取 data 值
+
+查看清除操作后的位图数据：
+
+```bash
 cast call --rpc-url "$RPC" "$ADDR_NEW" "data()(uint256)"
-  
 ```
 
+**实际结果（正确）**：`7067388259113537318333188541470036732407017383817643116203405149237936127`  
+**说明**：使用修复后的编译器，清除操作正确地只清除了单个位，其他位保持不变。
 
+---
 
-```
-问题合约：
-before：7067388259113537318333190002971674063309935587502475832486424805170479103
-after： 26959946667150639791744011812357824837229774757108006441791745163264
+## 步骤 6：结果对比
 
-正常合约：
-before：7067388259113537318333190002971674063309935587502475832486424805170479103
-after： 7067388259113537318333188541470036732407017383817643116203405149237936127
-```
+### 数据对比表
+
+| 合约版本 | 操作 | data 值 |
+|---------|------|---------|
+| 旧版本（bug） | setAllPairsUpTo(120) | 7067388259113537318333190002971674063309935587502475832486424805170479103 |
+| 旧版本（bug） | clearBorrow(80) 后 | 26959946667150639791744011812357824837229774757108006441791745163264 ❌ |
+| 新版本（正常） | setAllPairsUpTo(120) | 7067388259113537318333190002971674063309935587502475832486424805170479103 |
+| 新版本（正常） | clearBorrow(80) 后 | 7067388259113537318333188541470036732407017383817643116203405149237936127 ✅ |
+
+### Bug 影响说明
+
+- **旧版本**：`clearBorrow` 函数错误地清除了大量位，导致数据严重错误
+- **新版本**：`clearBorrow` 函数正确地只清除了指定位置的单个位
+- **数值差异**：旧版本的结果比新版本小很多，说明过多的位被错误清除
+
+---
+
+## 总结
+
+本复现演示了 zkSync LLVM 编译器在处理位操作时的严重 bug（CVE-2024-45056），该 bug 会导致位清除操作错误地清除多个位而不是单个位，这在 DeFi 协议（如 Aave V3）中会造成严重的资金安全问题。
+
+详细的技术分析请参阅 [zkSync-LLVM-Bug-分析.md](zkSync-LLVM-Bug-分析.md)。
 

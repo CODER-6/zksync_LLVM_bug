@@ -1,0 +1,16 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "MiscompileBitmap.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.24;\n\ncontract MiscompileBitmap {\n    uint256 public data;\n\n    function setAllPairsUpTo(uint256 n) external {\n        uint256 x = 0;\n        for (uint256 i = 0; i <= n; i++) {\n            x |= (uint256(3) << (i << 1));\n        }\n        data = x;\n    }\n\n    function clearBorrow(uint256 reserveIndex) external {\n        uint256 bit = uint256(1) << (reserveIndex << 1);\n        data &= ~bit;\n    }\n}\n"
+    }
+  },
+  "settings": {
+    "optimizer": { "enabled": true, "runs": 200 },
+    "outputSelection": {
+      "*": {
+        "*": ["abi", "evm", "eravm.assembly"]
+      }
+    }
+  }
+}
